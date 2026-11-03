@@ -248,7 +248,6 @@
   let timerId = null;
   let wakeLock = null;
 
-  // iOS-Reliable Web Audio Engine
   let audioCtx = null;
   let isAudioUnlocked = false;
 
@@ -267,7 +266,6 @@
   const roundsInput = document.getElementById('roundsInput');
   const presetList = document.getElementById('presetList');
 
-  // Direct Audio Unlocker for iOS WebKit
   function unlockAudio() {
     if (isAudioUnlocked && audioCtx && audioCtx.state === 'running') return;
 
@@ -279,7 +277,6 @@
       audioCtx.resume();
     }
 
-    // Play a silent 1-sample buffer directly on user tap to unlock the output bus
     try {
       const buffer = audioCtx.createBuffer(1, 1, 22050);
       const source = audioCtx.createBufferSource();
@@ -287,12 +284,9 @@
       source.connect(audioCtx.destination);
       source.start(0);
       isAudioUnlocked = true;
-    } catch (e) {
-      console.warn('Unlock error', e);
-    }
+    } catch (e) {}
   }
 
-  // Pre-bind unlock to any first touch on the page
   document.addEventListener('touchstart', unlockAudio, { once: true });
   document.addEventListener('touchend', unlockAudio, { once: true });
   document.addEventListener('click', unlockAudio, { once: true });
@@ -312,7 +306,6 @@
         osc.frequency.exponentialRampToValueAtTime(sweepTo, now + duration);
       }
 
-      // Slightly higher gain (0.6) so it is clearly audible
       gain.gain.setValueAtTime(0.6, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
@@ -321,9 +314,7 @@
 
       osc.start(now);
       osc.stop(now + duration);
-    } catch(e) {
-      console.error('Audio play error:', e);
-    }
+    } catch(e) {}
   }
 
   function playCountBlip() {
@@ -338,13 +329,59 @@
     playTone(440, 0.25, 'sine');
   }
 
-  function playDoneFanfare() {
-    [0, 160, 320].forEach((delay, idx) => {
-      setTimeout(() => {
-        const freqs = [659, 880, 1318];
-        playTone(freqs[idx], 0.35, 'triangle');
-      }, delay);
-    });
+  // Synthesizes a deep resonant bronze gong with harmonic decay
+  function playGong() {
+    unlockAudio();
+    if (!audioCtx) return;
+
+    try {
+      const now = audioCtx.currentTime;
+      const decayDuration = 3.5;
+
+      // Master output bus with mild lowpass filtering for warmth
+      const masterFilter = audioCtx.createBiquadFilter();
+      masterFilter.type = 'lowpass';
+      masterFilter.frequency.setValueAtTime(1400, now);
+      masterFilter.connect(audioCtx.destination);
+
+      // Strike transient (initial mallet impact thud)
+      const strikeOsc = audioCtx.createOscillator();
+      const strikeGain = audioCtx.createGain();
+      strikeOsc.type = 'triangle';
+      strikeOsc.frequency.setValueAtTime(120, now);
+      strikeGain.gain.setValueAtTime(0.8, now);
+      strikeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+      strikeOsc.connect(strikeGain);
+      strikeGain.connect(masterFilter);
+      strikeOsc.start(now);
+      strikeOsc.stop(now + 0.18);
+
+      // Inharmonic frequencies typical of tuned bronze gongs and singing bowls
+      const partials = [
+        { freq: 220, gain: 0.60, decay: 3.5 }, // Fundamental
+        { freq: 330, gain: 0.35, decay: 2.8 }, // Fifth
+        { freq: 442, gain: 0.30, decay: 2.4 }, // Octave (slightly detuned)
+        { freq: 665, gain: 0.20, decay: 1.8 }, // Shimmer overtone
+        { freq: 890, gain: 0.12, decay: 1.2 }  // High metallic sheen
+      ];
+
+      partials.forEach(p => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(p.freq, now);
+
+        // Immediate strike attack followed by a natural exponential fade
+        gain.gain.setValueAtTime(p.gain, now);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + p.decay);
+
+        osc.connect(gain);
+        gain.connect(masterFilter);
+
+        osc.start(now);
+        osc.stop(now + p.decay);
+      });
+    } catch(e) {}
   }
 
   async function requestWakeLock() {
@@ -460,7 +497,7 @@
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
-      playDoneFanfare();
+      playGong(); // Deep resonant gong
     }
   }
 
