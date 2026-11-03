@@ -247,7 +247,15 @@
   let secondsRemaining = 20;
   let timerId = null;
   let wakeLock = null;
+
+  // iOS-Reliable Web Audio Engine
   let audioCtx = null;
+  let isAudioUnlocked = false;
+
+  const DEFAULT_PRESETS = [
+    { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
+    { name: 'Boxing Rounds', work: 180, rest: 60, rounds: 5 }
+  ];
 
   const body = document.body;
   const phaseDisplay = document.getElementById('phaseDisplay');
@@ -259,65 +267,79 @@
   const roundsInput = document.getElementById('roundsInput');
   const presetList = document.getElementById('presetList');
 
-  // Hardcoded default presets that will always exist unless deleted
-  const DEFAULT_PRESETS = [
-    { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
-    { name: 'Boxing Rounds', work: 180, rest: 60, rounds: 5 }
-  ];
+  // Direct Audio Unlocker for iOS WebKit
+  function unlockAudio() {
+    if (isAudioUnlocked && audioCtx && audioCtx.state === 'running') return;
 
-  // 1. iOS Audio Unlocker: Safari requires user touch to start and keep audio alive
-  function getAudioContext() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
+
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
-    return audioCtx;
+
+    // Play a silent 1-sample buffer directly on user tap to unlock the output bus
+    try {
+      const buffer = audioCtx.createBuffer(1, 1, 22050);
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(0);
+      isAudioUnlocked = true;
+    } catch (e) {
+      console.warn('Unlock error', e);
+    }
   }
 
-  // Pre-warm audio on the very first screen interaction
-  window.addEventListener('touchstart', () => { getAudioContext(); }, { once: true });
-  window.addEventListener('click', () => { getAudioContext(); }, { once: true });
+  // Pre-bind unlock to any first touch on the page
+  document.addEventListener('touchstart', unlockAudio, { once: true });
+  document.addEventListener('touchend', unlockAudio, { once: true });
+  document.addEventListener('click', unlockAudio, { once: true });
 
   function playTone(freq, duration, type = 'sine', sweepTo = null) {
-    const ctx = getAudioContext();
-    if (!ctx) return;
+    unlockAudio();
+    if (!audioCtx) return;
 
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const now = ctx.currentTime;
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const now = audioCtx.currentTime;
 
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, now);
-    if (sweepTo) {
-      osc.frequency.exponentialRampToValueAtTime(sweepTo, now + duration);
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, now);
+      if (sweepTo) {
+        osc.frequency.exponentialRampToValueAtTime(sweepTo, now + duration);
+      }
+
+      // Slightly higher gain (0.6) so it is clearly audible
+      gain.gain.setValueAtTime(0.6, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + duration);
+    } catch(e) {
+      console.error('Audio play error:', e);
     }
-
-    gain.gain.setValueAtTime(0.4, now);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    osc.start(now);
-    osc.stop(now + duration);
   }
 
   function playCountBlip() {
-    playTone(550, 0.12, 'sine'); // 3, 2, 1
+    playTone(600, 0.12, 'sine');
   }
 
   function playGoBlip() {
-    playTone(880, 0.35, 'triangle', 1200); // Rising "GO!" sweep
+    playTone(880, 0.35, 'triangle', 1250);
   }
 
   function playRestBlip() {
-    playTone(440, 0.25, 'sine'); // Rest bell
+    playTone(440, 0.25, 'sine');
   }
 
   function playDoneFanfare() {
-    [0, 150, 300].forEach((delay, idx) => {
+    [0, 160, 320].forEach((delay, idx) => {
       setTimeout(() => {
         const freqs = [659, 880, 1318];
         playTone(freqs[idx], 0.35, 'triangle');
@@ -365,7 +387,7 @@
   }
 
   function toggleTimer() {
-    getAudioContext();
+    unlockAudio();
 
     if (timerId) {
       clearInterval(timerId);
@@ -454,11 +476,10 @@
     updateUI();
   }
 
-  // 2. Fixed Presets Logic: Seeds defaults into localStorage permanently if not already set
   function getStoredPresets() {
-    const raw = localStorage.getItem('interval_presets_v2');
+    const raw = localStorage.getItem('interval_presets_v3');
     if (!raw) {
-      localStorage.setItem('interval_presets_v2', JSON.stringify(DEFAULT_PRESETS));
+      localStorage.setItem('interval_presets_v3', JSON.stringify(DEFAULT_PRESETS));
       return [...DEFAULT_PRESETS];
     }
     return JSON.parse(raw);
@@ -491,7 +512,7 @@
       rest: parseInt(restInput.value) || 10,
       rounds: parseInt(roundsInput.value) || 8
     });
-    localStorage.setItem('interval_presets_v2', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v3', JSON.stringify(presets));
     nameInput.value = '';
     renderPresets();
   }
@@ -509,7 +530,7 @@
   function deletePreset(idx) {
     const presets = getStoredPresets();
     presets.splice(idx, 1);
-    localStorage.setItem('interval_presets_v2', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v3', JSON.stringify(presets));
     renderPresets();
   }
 
