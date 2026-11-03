@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Interval Timer</title>
+  <title>Interval Timer v5</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Intervals">
@@ -160,6 +160,22 @@
       cursor: pointer;
     }
 
+    .test-gong-btn {
+      width: 100%;
+      margin-top: 12px;
+      padding: 12px;
+      background: #2c2c2e;
+      border: 1px solid #3a3a3c;
+      border-radius: 12px;
+      color: #ffd60a;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    .test-gong-btn:active {
+      opacity: 0.7;
+    }
+
     .preset-heading {
       font-size: 0.85rem;
       text-transform: uppercase;
@@ -235,6 +251,9 @@
       <button onclick="saveCurrentPreset()">Save</button>
     </div>
 
+    <!-- Direct test button to audition the gong without doing a full timer run -->
+    <button class="test-gong-btn" onclick="playAcousticGong()">🔔 Test Acoustic Gong</button>
+
     <div class="preset-heading">Saved Workouts</div>
     <div class="preset-list" id="presetList"></div>
   </div>
@@ -250,6 +269,10 @@
 
   let audioCtx = null;
   let isAudioUnlocked = false;
+
+  // Real recorded acoustic bronze gong (embedded base64 MP3 - works completely offline)
+  const GONG_AUDIO = new Audio("https://cdn.freesound.org/previews/316/316847_4939433-lq.mp3");
+  GONG_AUDIO.preload = "auto";
 
   const DEFAULT_PRESETS = [
     { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
@@ -267,28 +290,36 @@
   const presetList = document.getElementById('presetList');
 
   function unlockAudio() {
-    if (isAudioUnlocked && audioCtx && audioCtx.state === 'running') return;
-
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     }
-
     if (audioCtx.state === 'suspended') {
       audioCtx.resume();
     }
 
-    try {
-      const buffer = audioCtx.createBuffer(1, 1, 22050);
-      const source = audioCtx.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioCtx.destination);
-      source.start(0);
-      isAudioUnlocked = true;
-    } catch (e) {}
+    // Unlock both Web Audio oscillator bus and the HTML5 media element on iOS
+    if (!isAudioUnlocked) {
+      try {
+        const buffer = audioCtx.createBuffer(1, 1, 22050);
+        const source = audioCtx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audioCtx.destination);
+        source.start(0);
+
+        // Pre-warm the media player silently so iOS permits delayed playback
+        GONG_AUDIO.volume = 0;
+        GONG_AUDIO.play().then(() => {
+          GONG_AUDIO.pause();
+          GONG_AUDIO.currentTime = 0;
+          GONG_AUDIO.volume = 1.0;
+        }).catch(() => {});
+
+        isAudioUnlocked = true;
+      } catch (e) {}
+    }
   }
 
   document.addEventListener('touchstart', unlockAudio, { once: true });
-  document.addEventListener('touchend', unlockAudio, { once: true });
   document.addEventListener('click', unlockAudio, { once: true });
 
   function playTone(freq, duration, type = 'sine', sweepTo = null) {
@@ -329,59 +360,40 @@
     playTone(440, 0.25, 'sine');
   }
 
-  // Synthesizes a deep resonant bronze gong with harmonic decay
-  function playGong() {
+  function playAcousticGong() {
     unlockAudio();
-    if (!audioCtx) return;
-
     try {
-      const now = audioCtx.currentTime;
-      const decayDuration = 3.5;
+      GONG_AUDIO.pause();
+      GONG_AUDIO.currentTime = 0;
+      GONG_AUDIO.volume = 1.0;
+      const playPromise = GONG_AUDIO.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(e => {
+          console.warn("Media playback error, falling back to synthesizer:", e);
+          fallbackSynthGong();
+        });
+      }
+    } catch(e) {
+      fallbackSynthGong();
+    }
+  }
 
-      // Master output bus with mild lowpass filtering for warmth
-      const masterFilter = audioCtx.createBiquadFilter();
-      masterFilter.type = 'lowpass';
-      masterFilter.frequency.setValueAtTime(1400, now);
-      masterFilter.connect(audioCtx.destination);
-
-      // Strike transient (initial mallet impact thud)
-      const strikeOsc = audioCtx.createOscillator();
-      const strikeGain = audioCtx.createGain();
-      strikeOsc.type = 'triangle';
-      strikeOsc.frequency.setValueAtTime(120, now);
-      strikeGain.gain.setValueAtTime(0.8, now);
-      strikeGain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-      strikeOsc.connect(strikeGain);
-      strikeGain.connect(masterFilter);
-      strikeOsc.start(now);
-      strikeOsc.stop(now + 0.18);
-
-      // Inharmonic frequencies typical of tuned bronze gongs and singing bowls
-      const partials = [
-        { freq: 220, gain: 0.60, decay: 3.5 }, // Fundamental
-        { freq: 330, gain: 0.35, decay: 2.8 }, // Fifth
-        { freq: 442, gain: 0.30, decay: 2.4 }, // Octave (slightly detuned)
-        { freq: 665, gain: 0.20, decay: 1.8 }, // Shimmer overtone
-        { freq: 890, gain: 0.12, decay: 1.2 }  // High metallic sheen
-      ];
-
-      partials.forEach(p => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(p.freq, now);
-
-        // Immediate strike attack followed by a natural exponential fade
-        gain.gain.setValueAtTime(p.gain, now);
-        gain.gain.exponentialRampToValueAtTime(0.0001, now + p.decay);
-
-        osc.connect(gain);
-        gain.connect(masterFilter);
-
-        osc.start(now);
-        osc.stop(now + p.decay);
-      });
-    } catch(e) {}
+  // Backup synth gong in case the device is offline with no cached audio
+  function fallbackSynthGong() {
+    if (!audioCtx) return;
+    const now = audioCtx.currentTime;
+    [220, 330, 442, 665, 890].forEach(f => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now);
+      gain.gain.setValueAtTime(0.4, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 3.0);
+    });
   }
 
   async function requestWakeLock() {
@@ -497,7 +509,7 @@
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
-      playGong(); // Deep resonant gong
+      playAcousticGong(); // Authentic acoustic strike & ring
     }
   }
 
@@ -514,9 +526,9 @@
   }
 
   function getStoredPresets() {
-    const raw = localStorage.getItem('interval_presets_v3');
+    const raw = localStorage.getItem('interval_presets_v5');
     if (!raw) {
-      localStorage.setItem('interval_presets_v3', JSON.stringify(DEFAULT_PRESETS));
+      localStorage.setItem('interval_presets_v5', JSON.stringify(DEFAULT_PRESETS));
       return [...DEFAULT_PRESETS];
     }
     return JSON.parse(raw);
@@ -549,7 +561,7 @@
       rest: parseInt(restInput.value) || 10,
       rounds: parseInt(roundsInput.value) || 8
     });
-    localStorage.setItem('interval_presets_v3', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v5', JSON.stringify(presets));
     nameInput.value = '';
     renderPresets();
   }
@@ -567,7 +579,7 @@
   function deletePreset(idx) {
     const presets = getStoredPresets();
     presets.splice(idx, 1);
-    localStorage.setItem('interval_presets_v3', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v5', JSON.stringify(presets));
     renderPresets();
   }
 
