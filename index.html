@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Interval Timer v5</title>
+  <title>Interval Timer</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Intervals">
@@ -251,8 +251,7 @@
       <button onclick="saveCurrentPreset()">Save</button>
     </div>
 
-    <!-- Direct test button to audition the gong without doing a full timer run -->
-    <button class="test-gong-btn" onclick="playAcousticGong()">🔔 Test Acoustic Gong</button>
+    <button class="test-gong-btn" onclick="playGongAudio()">🔔 Test Uploaded gong.mp3</button>
 
     <div class="preset-heading">Saved Workouts</div>
     <div class="preset-list" id="presetList"></div>
@@ -270,9 +269,9 @@
   let audioCtx = null;
   let isAudioUnlocked = false;
 
-  // Real recorded acoustic bronze gong (embedded base64 MP3 - works completely offline)
-  const GONG_AUDIO = new Audio("https://cdn.freesound.org/previews/316/316847_4939433-lq.mp3");
-  GONG_AUDIO.preload = "auto";
+  // Local audio file hosted in repository
+  const gongAudio = new Audio('gong.mp3');
+  gongAudio.preload = 'auto';
 
   const DEFAULT_PRESETS = [
     { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
@@ -297,22 +296,25 @@
       audioCtx.resume();
     }
 
-    // Unlock both Web Audio oscillator bus and the HTML5 media element on iOS
     if (!isAudioUnlocked) {
       try {
+        // Unlock synthesized beeps
         const buffer = audioCtx.createBuffer(1, 1, 22050);
         const source = audioCtx.createBufferSource();
         source.buffer = buffer;
         source.connect(audioCtx.destination);
         source.start(0);
 
-        // Pre-warm the media player silently so iOS permits delayed playback
-        GONG_AUDIO.volume = 0;
-        GONG_AUDIO.play().then(() => {
-          GONG_AUDIO.pause();
-          GONG_AUDIO.currentTime = 0;
-          GONG_AUDIO.volume = 1.0;
-        }).catch(() => {});
+        // Pre-warm the HTML5 gong audio element silently for iOS
+        gongAudio.volume = 0;
+        const warmup = gongAudio.play();
+        if (warmup !== undefined) {
+          warmup.then(() => {
+            gongAudio.pause();
+            gongAudio.currentTime = 0;
+            gongAudio.volume = 1.0;
+          }).catch(() => {});
+        }
 
         isAudioUnlocked = true;
       } catch (e) {}
@@ -360,40 +362,21 @@
     playTone(440, 0.25, 'sine');
   }
 
-  function playAcousticGong() {
+  function playGongAudio() {
     unlockAudio();
     try {
-      GONG_AUDIO.pause();
-      GONG_AUDIO.currentTime = 0;
-      GONG_AUDIO.volume = 1.0;
-      const playPromise = GONG_AUDIO.play();
+      gongAudio.pause();
+      gongAudio.currentTime = 0;
+      gongAudio.volume = 1.0;
+      const playPromise = gongAudio.play();
       if (playPromise !== undefined) {
-        playPromise.catch(e => {
-          console.warn("Media playback error, falling back to synthesizer:", e);
-          fallbackSynthGong();
+        playPromise.catch(err => {
+          console.warn('Playback blocked or file missing:', err);
         });
       }
-    } catch(e) {
-      fallbackSynthGong();
+    } catch (e) {
+      console.warn('Gong error:', e);
     }
-  }
-
-  // Backup synth gong in case the device is offline with no cached audio
-  function fallbackSynthGong() {
-    if (!audioCtx) return;
-    const now = audioCtx.currentTime;
-    [220, 330, 442, 665, 890].forEach(f => {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(f, now);
-      gain.gain.setValueAtTime(0.4, now);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.0);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(now);
-      osc.stop(now + 3.0);
-    });
   }
 
   async function requestWakeLock() {
@@ -509,7 +492,7 @@
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
-      playAcousticGong(); // Authentic acoustic strike & ring
+      playGongAudio();
     }
   }
 
@@ -526,9 +509,9 @@
   }
 
   function getStoredPresets() {
-    const raw = localStorage.getItem('interval_presets_v5');
+    const raw = localStorage.getItem('interval_presets_v7');
     if (!raw) {
-      localStorage.setItem('interval_presets_v5', JSON.stringify(DEFAULT_PRESETS));
+      localStorage.setItem('interval_presets_v7', JSON.stringify(DEFAULT_PRESETS));
       return [...DEFAULT_PRESETS];
     }
     return JSON.parse(raw);
@@ -561,7 +544,7 @@
       rest: parseInt(restInput.value) || 10,
       rounds: parseInt(roundsInput.value) || 8
     });
-    localStorage.setItem('interval_presets_v5', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v7', JSON.stringify(presets));
     nameInput.value = '';
     renderPresets();
   }
@@ -579,7 +562,7 @@
   function deletePreset(idx) {
     const presets = getStoredPresets();
     presets.splice(idx, 1);
-    localStorage.setItem('interval_presets_v5', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v7', JSON.stringify(presets));
     renderPresets();
   }
 
