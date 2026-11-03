@@ -11,6 +11,7 @@
     :root {
       --bg: #000000;
       --card-bg: #1c1c1e;
+      --accent-prepare: #ffd60a;
       --accent-work: #30d158;
       --accent-rest: #ff9f0a;
       --accent-done: #0a84ff;
@@ -34,8 +35,9 @@
       flex-direction: column;
       align-items: center;
       justify-content: flex-start;
-      transition: background-color 0.3s ease;
+      transition: background-color 0.25s ease;
     }
+    body.phase-prepare { background-color: #2c2500; }
     body.phase-work { background-color: #05240f; }
     body.phase-rest { background-color: #2b1800; }
     body.phase-done { background-color: #021a38; }
@@ -61,19 +63,20 @@
       align-items: center;
     }
     .phase-badge {
-      font-size: 1.1rem;
+      font-size: 1.15rem;
       font-weight: 700;
       letter-spacing: 1px;
       text-transform: uppercase;
       margin-bottom: 4px;
       color: var(--text-muted);
     }
+    .phase-prepare .phase-badge { color: var(--accent-prepare); }
     .phase-work .phase-badge { color: var(--accent-work); }
     .phase-rest .phase-badge { color: var(--accent-rest); }
     .phase-done .phase-badge { color: var(--accent-done); }
 
     .time-large {
-      font-size: clamp(5rem, 20vw, 7.5rem);
+      font-size: clamp(5.5rem, 22vw, 8rem);
       font-weight: 300;
       font-variant-numeric: tabular-nums;
       line-height: 1;
@@ -166,7 +169,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-top: 6px;
+      margin-top: 8px;
     }
     .preset-chip {
       background: #2c2c2e;
@@ -198,7 +201,6 @@
 <body>
 
 <div class="container">
-  <!-- Active Timer Card -->
   <div class="timer-card">
     <div class="phase-badge" id="phaseDisplay">Ready</div>
     <div class="time-large" id="timeDisplay">00:20</div>
@@ -210,7 +212,6 @@
     </div>
   </div>
 
-  <!-- Settings & Custom Inputs -->
   <div class="config-card">
     <div class="row">
       <label for="workInput">Work (seconds)</label>
@@ -225,7 +226,6 @@
       <input type="number" id="roundsInput" value="8" min="1" onchange="syncFromInputs()">
     </div>
 
-    <!-- Save Timer -->
     <div class="save-row">
       <input type="text" id="presetName" placeholder="Timer name (e.g. Tabata)">
       <button onclick="saveCurrentPreset()">Save</button>
@@ -238,7 +238,7 @@
 <script>
   let config = { work: 20, rest: 10, rounds: 8 };
   let currentRound = 1;
-  let phase = 'ready'; // 'ready', 'work', 'rest', 'done'
+  let phase = 'ready'; // 'ready', 'prepare', 'work', 'rest', 'done'
   let secondsRemaining = 20;
   let timerId = null;
   let wakeLock = null;
@@ -254,28 +254,90 @@
   const roundsInput = document.getElementById('roundsInput');
   const presetList = document.getElementById('presetList');
 
-  // Web Audio Cues
-  function playTone(freq, duration = 0.15) {
+  function initAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  // Count-in blip (3, 2, 1)
+  function playCountBlip() {
+    initAudio();
     try {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(550, audioCtx.currentTime); // Mid blip
+      gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
       osc.connect(gain);
       gain.connect(audioCtx.destination);
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
       osc.start();
-      osc.stop(audioCtx.currentTime + duration);
+      osc.stop(audioCtx.currentTime + 0.12);
     } catch(e) {}
   }
 
-  // Prevent Screen Sleep (Safari on iOS 16.4+)
+  // Punchy "GO" chime
+  function playGoBlip() {
+    initAudio();
+    try {
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      
+      // Rising frequency sweep
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1175, now + 0.08);
+
+      gain.gain.setValueAtTime(0.45, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(now + 0.35);
+    } catch(e) {}
+  }
+
+  // Rest bell
+  function playRestBlip() {
+    initAudio();
+    try {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.25);
+    } catch(e) {}
+  }
+
+  // Done chime
+  function playDoneFanfare() {
+    [0, 150, 300].forEach((delay, idx) => {
+      setTimeout(() => {
+        initAudio();
+        const freqs = [659, 880, 1318];
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.frequency.value = freqs[idx];
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.35);
+      }, delay);
+    });
+  }
+
   async function requestWakeLock() {
     if ('wakeLock' in navigator) {
-      try {
-        wakeLock = await navigator.wakeLock.request('screen');
-      } catch (err) {}
+      try { wakeLock = await navigator.wakeLock.request('screen'); } catch(e) {}
     }
   }
 
@@ -295,10 +357,11 @@
   function updateUI() {
     timeDisplay.textContent = formatTime(secondsRemaining);
     roundDisplay.textContent = `Round ${currentRound} of ${config.rounds}`;
-    phaseDisplay.textContent = phase.toUpperCase();
+    phaseDisplay.textContent = phase === 'prepare' ? 'GET READY' : phase.toUpperCase();
 
     body.className = '';
-    if (phase === 'work') body.classList.add('phase-work');
+    if (phase === 'prepare') body.classList.add('phase-prepare');
+    else if (phase === 'work') body.classList.add('phase-work');
     else if (phase === 'rest') body.classList.add('phase-rest');
     else if (phase === 'done') body.classList.add('phase-done');
   }
@@ -312,7 +375,7 @@
   }
 
   function toggleTimer() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    initAudio();
 
     if (timerId) {
       // Pause
@@ -326,9 +389,9 @@
       requestWakeLock();
       if (phase === 'ready' || phase === 'done') {
         currentRound = 1;
-        phase = 'work';
-        secondsRemaining = config.work;
-        playTone(880, 0.3); // High starting beep
+        phase = 'prepare';
+        secondsRemaining = 3;
+        playCountBlip(); // 3
       }
       timerId = setInterval(tick, 1000);
       startBtn.textContent = 'Pause';
@@ -338,17 +401,33 @@
   }
 
   function tick() {
+    if (phase === 'prepare') {
+      if (secondsRemaining > 1) {
+        secondsRemaining--;
+        playCountBlip(); // 2, 1
+      } else {
+        phase = 'work';
+        secondsRemaining = config.work;
+        playGoBlip(); // GO!
+      }
+      updateUI();
+      return;
+    }
+
     if (secondsRemaining > 1) {
       secondsRemaining--;
-      if (secondsRemaining <= 3) playTone(440, 0.1); // 3, 2, 1 warning beeps
+      // 3, 2, 1 count blip right before phase changes
+      if (secondsRemaining <= 3) {
+        playCountBlip();
+      }
       updateUI();
     } else {
-      // Transition Phase
+      // Current block hit zero
       if (phase === 'work') {
         if (config.rest > 0 && currentRound <= config.rounds) {
           phase = 'rest';
           secondsRemaining = config.rest;
-          playTone(587, 0.25); // Lower rest beep
+          playRestBlip();
         } else {
           advanceRound();
         }
@@ -364,9 +443,8 @@
       currentRound++;
       phase = 'work';
       secondsRemaining = config.work;
-      playTone(880, 0.3); // Work beep
+      playGoBlip(); // Distinct sound as new round starts
     } else {
-      // Finished all rounds
       phase = 'done';
       secondsRemaining = 0;
       clearInterval(timerId);
@@ -374,7 +452,7 @@
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
-      playTone(1046, 0.5); // Final high chime
+      playDoneFanfare();
     }
   }
 
@@ -390,7 +468,6 @@
     updateUI();
   }
 
-  // Presets via localStorage
   function loadPresets() {
     const saved = localStorage.getItem('interval_presets');
     const presets = saved ? JSON.parse(saved) : [
@@ -445,7 +522,6 @@
     loadPresets();
   }
 
-  // Initial setup
   loadPresets();
   syncFromInputs();
 </script>
