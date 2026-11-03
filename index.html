@@ -51,7 +51,6 @@
       gap: 16px;
     }
 
-    /* Timer Display */
     .timer-card {
       width: 100%;
       background: var(--card-bg);
@@ -88,7 +87,6 @@
       font-weight: 500;
     }
 
-    /* Controls */
     .controls {
       display: flex;
       gap: 20px;
@@ -111,7 +109,6 @@
     .btn-pause { background: #402905; color: var(--accent-rest); }
     .btn-reset { background: #2c2c2e; color: #fff; }
 
-    /* Configuration Panel */
     .config-card {
       width: 100%;
       background: var(--card-bg);
@@ -139,11 +136,10 @@
       text-align: center;
     }
 
-    /* Presets Section */
     .save-row {
       display: flex;
       gap: 8px;
-      margin-top: 10px;
+      margin-top: 12px;
     }
     .save-row input {
       flex: 1;
@@ -158,10 +154,19 @@
       padding: 10px 16px;
       border-radius: 12px;
       border: none;
-      background: #2c2c2e;
-      color: #fff;
+      background: #30d158;
+      color: #000;
       font-weight: 600;
       cursor: pointer;
+    }
+
+    .preset-heading {
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-top: 16px;
+      margin-bottom: 6px;
     }
 
     .preset-list {
@@ -169,7 +174,6 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin-top: 8px;
     }
     .preset-chip {
       background: #2c2c2e;
@@ -192,7 +196,7 @@
       color: #ff453a;
       background: transparent;
       border: none;
-      font-size: 1.1rem;
+      font-size: 1.2rem;
       padding: 4px 8px;
       cursor: pointer;
     }
@@ -227,10 +231,11 @@
     </div>
 
     <div class="save-row">
-      <input type="text" id="presetName" placeholder="Timer name (e.g. Tabata)">
+      <input type="text" id="presetName" placeholder="Name this workout (e.g. Sprint)">
       <button onclick="saveCurrentPreset()">Save</button>
     </div>
 
+    <div class="preset-heading">Saved Workouts</div>
     <div class="preset-list" id="presetList"></div>
   </div>
 </div>
@@ -238,7 +243,7 @@
 <script>
   let config = { work: 20, rest: 10, rounds: 8 };
   let currentRound = 1;
-  let phase = 'ready'; // 'ready', 'prepare', 'work', 'rest', 'done'
+  let phase = 'ready';
   let secondsRemaining = 20;
   let timerId = null;
   let wakeLock = null;
@@ -254,83 +259,68 @@
   const roundsInput = document.getElementById('roundsInput');
   const presetList = document.getElementById('presetList');
 
-  function initAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === 'suspended') audioCtx.resume();
+  // Hardcoded default presets that will always exist unless deleted
+  const DEFAULT_PRESETS = [
+    { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
+    { name: 'Boxing Rounds', work: 180, rest: 60, rounds: 5 }
+  ];
+
+  // 1. iOS Audio Unlocker: Safari requires user touch to start and keep audio alive
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
   }
 
-  // Count-in blip (3, 2, 1)
+  // Pre-warm audio on the very first screen interaction
+  window.addEventListener('touchstart', () => { getAudioContext(); }, { once: true });
+  window.addEventListener('click', () => { getAudioContext(); }, { once: true });
+
+  function playTone(freq, duration, type = 'sine', sweepTo = null) {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const now = ctx.currentTime;
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    if (sweepTo) {
+      osc.frequency.exponentialRampToValueAtTime(sweepTo, now + duration);
+    }
+
+    gain.gain.setValueAtTime(0.4, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
   function playCountBlip() {
-    initAudio();
-    try {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(550, audioCtx.currentTime); // Mid blip
-      gain.gain.setValueAtTime(0.35, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.12);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.12);
-    } catch(e) {}
+    playTone(550, 0.12, 'sine'); // 3, 2, 1
   }
 
-  // Punchy "GO" chime
   function playGoBlip() {
-    initAudio();
-    try {
-      const now = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'triangle';
-      
-      // Rising frequency sweep
-      osc.frequency.setValueAtTime(880, now);
-      osc.frequency.exponentialRampToValueAtTime(1175, now + 0.08);
-
-      gain.gain.setValueAtTime(0.45, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(now + 0.35);
-    } catch(e) {}
+    playTone(880, 0.35, 'triangle', 1200); // Rising "GO!" sweep
   }
 
-  // Rest bell
   function playRestBlip() {
-    initAudio();
-    try {
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.25);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.25);
-    } catch(e) {}
+    playTone(440, 0.25, 'sine'); // Rest bell
   }
 
-  // Done chime
   function playDoneFanfare() {
     [0, 150, 300].forEach((delay, idx) => {
       setTimeout(() => {
-        initAudio();
         const freqs = [659, 880, 1318];
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.frequency.value = freqs[idx];
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.35);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + 0.35);
+        playTone(freqs[idx], 0.35, 'triangle');
       }, delay);
     });
   }
@@ -375,23 +365,21 @@
   }
 
   function toggleTimer() {
-    initAudio();
+    getAudioContext();
 
     if (timerId) {
-      // Pause
       clearInterval(timerId);
       timerId = null;
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
     } else {
-      // Start or Resume
       requestWakeLock();
       if (phase === 'ready' || phase === 'done') {
         currentRound = 1;
         phase = 'prepare';
         secondsRemaining = 3;
-        playCountBlip(); // 3
+        playCountBlip();
       }
       timerId = setInterval(tick, 1000);
       startBtn.textContent = 'Pause';
@@ -404,11 +392,11 @@
     if (phase === 'prepare') {
       if (secondsRemaining > 1) {
         secondsRemaining--;
-        playCountBlip(); // 2, 1
+        playCountBlip();
       } else {
         phase = 'work';
         secondsRemaining = config.work;
-        playGoBlip(); // GO!
+        playGoBlip();
       }
       updateUI();
       return;
@@ -416,13 +404,11 @@
 
     if (secondsRemaining > 1) {
       secondsRemaining--;
-      // 3, 2, 1 count blip right before phase changes
       if (secondsRemaining <= 3) {
         playCountBlip();
       }
       updateUI();
     } else {
-      // Current block hit zero
       if (phase === 'work') {
         if (config.rest > 0 && currentRound <= config.rounds) {
           phase = 'rest';
@@ -443,7 +429,7 @@
       currentRound++;
       phase = 'work';
       secondsRemaining = config.work;
-      playGoBlip(); // Distinct sound as new round starts
+      playGoBlip();
     } else {
       phase = 'done';
       secondsRemaining = 0;
@@ -468,18 +454,24 @@
     updateUI();
   }
 
-  function loadPresets() {
-    const saved = localStorage.getItem('interval_presets');
-    const presets = saved ? JSON.parse(saved) : [
-      { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
-      { name: 'Boxing Rounds', work: 180, rest: 60, rounds: 5 }
-    ];
+  // 2. Fixed Presets Logic: Seeds defaults into localStorage permanently if not already set
+  function getStoredPresets() {
+    const raw = localStorage.getItem('interval_presets_v2');
+    if (!raw) {
+      localStorage.setItem('interval_presets_v2', JSON.stringify(DEFAULT_PRESETS));
+      return [...DEFAULT_PRESETS];
+    }
+    return JSON.parse(raw);
+  }
+
+  function renderPresets() {
+    const presets = getStoredPresets();
     presetList.innerHTML = '';
     presets.forEach((p, idx) => {
       const chip = document.createElement('div');
       chip.className = 'preset-chip';
       chip.innerHTML = `
-        <div onclick="applyPreset(${idx})">
+        <div onclick="applyPreset(${idx})" style="flex:1;">
           <div class="preset-name">${p.name}</div>
           <div class="preset-meta">${p.work}s Work • ${p.rest}s Rest • ${p.rounds} Rds</div>
         </div>
@@ -492,21 +484,20 @@
   function saveCurrentPreset() {
     const nameInput = document.getElementById('presetName');
     const name = nameInput.value.trim() || `Workout ${new Date().toLocaleDateString()}`;
-    const saved = localStorage.getItem('interval_presets');
-    const presets = saved ? JSON.parse(saved) : [];
+    const presets = getStoredPresets();
     presets.push({
       name,
       work: parseInt(workInput.value) || 20,
       rest: parseInt(restInput.value) || 10,
       rounds: parseInt(roundsInput.value) || 8
     });
-    localStorage.setItem('interval_presets', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v2', JSON.stringify(presets));
     nameInput.value = '';
-    loadPresets();
+    renderPresets();
   }
 
   function applyPreset(idx) {
-    const presets = JSON.parse(localStorage.getItem('interval_presets'));
+    const presets = getStoredPresets();
     const p = presets[idx];
     if (!p) return;
     workInput.value = p.work;
@@ -516,13 +507,13 @@
   }
 
   function deletePreset(idx) {
-    const presets = JSON.parse(localStorage.getItem('interval_presets'));
+    const presets = getStoredPresets();
     presets.splice(idx, 1);
-    localStorage.setItem('interval_presets', JSON.stringify(presets));
-    loadPresets();
+    localStorage.setItem('interval_presets_v2', JSON.stringify(presets));
+    renderPresets();
   }
 
-  loadPresets();
+  renderPresets();
   syncFromInputs();
 </script>
 </body>
