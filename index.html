@@ -5,10 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Interval Timer</title>
   
-  <!-- Apple Touch Icon for Home Screen -->
   <link rel="apple-touch-icon" href="meeper.jpg">
-  
-  <!-- Standalone App Settings -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Intervals">
@@ -256,9 +253,8 @@
 
   let audioCtx = null;
   let isAudioUnlocked = false;
-
-  const gongAudio = new Audio('gong.mp3');
-  gongAudio.preload = 'auto';
+  let gongBuffer = null;
+  let rawGongArrayBuffer = null;
 
   const DEFAULT_PRESETS = [
     { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
@@ -275,6 +271,18 @@
   const roundsInput = document.getElementById('roundsInput');
   const presetList = document.getElementById('presetList');
 
+  // Pre-fetch raw binary data immediately so it is cached in RAM before user even taps Start
+  fetch('gong.mp3')
+    .then(r => r.arrayBuffer())
+    .then(buf => {
+      rawGongArrayBuffer = buf;
+      // If audio context was already instantiated, decode right away
+      if (audioCtx && !gongBuffer) {
+        audioCtx.decodeAudioData(buf.slice(0), decoded => { gongBuffer = decoded; });
+      }
+    })
+    .catch(() => {});
+
   function unlockAudio() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -290,19 +298,15 @@
         source.buffer = buffer;
         source.connect(audioCtx.destination);
         source.start(0);
-
-        gongAudio.volume = 0;
-        const warmup = gongAudio.play();
-        if (warmup !== undefined) {
-          warmup.then(() => {
-            gongAudio.pause();
-            gongAudio.currentTime = 0;
-            gongAudio.volume = 1.0;
-          }).catch(() => {});
-        }
-
         isAudioUnlocked = true;
       } catch (e) {}
+    }
+
+    // Decode gong directly into memory if ready
+    if (!gongBuffer && rawGongArrayBuffer) {
+      audioCtx.decodeAudioData(rawGongArrayBuffer.slice(0), decoded => {
+        gongBuffer = decoded;
+      }, () => {});
     }
   }
 
@@ -347,21 +351,36 @@
     playTone(440, 0.25, 'sine');
   }
 
-  function playGongAudio() {
+  // Instant trigger with 0ms delay
+  function playGongInstant() {
     unlockAudio();
-    try {
-      gongAudio.pause();
-      gongAudio.currentTime = 0;
-      gongAudio.volume = 1.0;
-      const playPromise = gongAudio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(err => {
-          console.warn('Playback error:', err);
-        });
-      }
-    } catch (e) {
-      console.warn('Gong error:', e);
+    if (!audioCtx) return;
+
+    if (gongBuffer) {
+      try {
+        const source = audioCtx.createBufferSource();
+        source.buffer = gongBuffer;
+        source.connect(audioCtx.destination);
+        // Hardware zero-latency scheduling
+        source.start(audioCtx.currentTime);
+        return;
+      } catch (e) {}
     }
+
+    // If for any reason the MP3 was not yet decoded, fallback synthesizer fires with 0ms delay
+    const now = audioCtx.currentTime;
+    [212, 334, 472, 618].forEach(f => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(f, now);
+      gain.gain.setValueAtTime(0.5, now);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 3.5);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start(now);
+      osc.stop(now + 3.5);
+    });
   }
 
   async function requestWakeLock() {
@@ -477,7 +496,7 @@
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
-      playGongAudio();
+      playGongInstant();
     }
   }
 
@@ -494,9 +513,9 @@
   }
 
   function getStoredPresets() {
-    const raw = localStorage.getItem('interval_presets_v8');
+    const raw = localStorage.getItem('interval_presets_v10');
     if (!raw) {
-      localStorage.setItem('interval_presets_v8', JSON.stringify(DEFAULT_PRESETS));
+      localStorage.setItem('interval_presets_v10', JSON.stringify(DEFAULT_PRESETS));
       return [...DEFAULT_PRESETS];
     }
     return JSON.parse(raw);
@@ -529,7 +548,7 @@
       rest: parseInt(restInput.value) || 10,
       rounds: parseInt(roundsInput.value) || 8
     });
-    localStorage.setItem('interval_presets_v8', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v10', JSON.stringify(presets));
     nameInput.value = '';
     renderPresets();
   }
@@ -547,7 +566,7 @@
   function deletePreset(idx) {
     const presets = getStoredPresets();
     presets.splice(idx, 1);
-    localStorage.setItem('interval_presets_v8', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v10', JSON.stringify(presets));
     renderPresets();
   }
 
