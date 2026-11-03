@@ -4,9 +4,15 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Interval Timer</title>
+  
+  <!-- Apple Touch Icon for Home Screen -->
+  <link rel="apple-touch-icon" href="meeper.jpg">
+  
+  <!-- Standalone App Settings -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Intervals">
+  
   <style>
     :root {
       --bg: #000000;
@@ -160,22 +166,6 @@
       cursor: pointer;
     }
 
-    .test-gong-btn {
-      width: 100%;
-      margin-top: 12px;
-      padding: 12px;
-      background: #2c2c2e;
-      border: 1px solid #3a3a3c;
-      border-radius: 12px;
-      color: #ffd60a;
-      font-weight: 600;
-      font-size: 1rem;
-      cursor: pointer;
-    }
-    .test-gong-btn:active {
-      opacity: 0.7;
-    }
-
     .preset-heading {
       font-size: 0.85rem;
       text-transform: uppercase;
@@ -251,8 +241,6 @@
       <button onclick="saveCurrentPreset()">Save</button>
     </div>
 
-    <button class="test-gong-btn" onclick="playGongAudio()">🔔 Test Uploaded gong.mp3</button>
-
     <div class="preset-heading">Saved Workouts</div>
     <div class="preset-list" id="presetList"></div>
   </div>
@@ -269,7 +257,6 @@
   let audioCtx = null;
   let isAudioUnlocked = false;
 
-  // Local audio file hosted in repository
   const gongAudio = new Audio('gong.mp3');
   gongAudio.preload = 'auto';
 
@@ -298,14 +285,12 @@
 
     if (!isAudioUnlocked) {
       try {
-        // Unlock synthesized beeps
         const buffer = audioCtx.createBuffer(1, 1, 22050);
         const source = audioCtx.createBufferSource();
         source.buffer = buffer;
         source.connect(audioCtx.destination);
         source.start(0);
 
-        // Pre-warm the HTML5 gong audio element silently for iOS
         gongAudio.volume = 0;
         const warmup = gongAudio.play();
         if (warmup !== undefined) {
@@ -371,7 +356,7 @@
       const playPromise = gongAudio.play();
       if (playPromise !== undefined) {
         playPromise.catch(err => {
-          console.warn('Playback blocked or file missing:', err);
+          console.warn('Playback error:', err);
         });
       }
     } catch (e) {
@@ -509,9 +494,9 @@
   }
 
   function getStoredPresets() {
-    const raw = localStorage.getItem('interval_presets_v7');
+    const raw = localStorage.getItem('interval_presets_v8');
     if (!raw) {
-      localStorage.setItem('interval_presets_v7', JSON.stringify(DEFAULT_PRESETS));
+      localStorage.setItem('interval_presets_v8', JSON.stringify(DEFAULT_PRESETS));
       return [...DEFAULT_PRESETS];
     }
     return JSON.parse(raw);
@@ -544,7 +529,7 @@
       rest: parseInt(restInput.value) || 10,
       rounds: parseInt(roundsInput.value) || 8
     });
-    localStorage.setItem('interval_presets_v7', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v8', JSON.stringify(presets));
     nameInput.value = '';
     renderPresets();
   }
@@ -562,7 +547,7 @@
   function deletePreset(idx) {
     const presets = getStoredPresets();
     presets.splice(idx, 1);
-    localStorage.setItem('interval_presets_v7', JSON.stringify(presets));
+    localStorage.setItem('interval_presets_v8', JSON.stringify(presets));
     renderPresets();
   }
 
