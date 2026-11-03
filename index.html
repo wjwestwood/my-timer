@@ -3,190 +3,451 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Timer</title>
-  <!-- Allows it to behave like a native iOS app when saved -->
+  <title>Interval Timer</title>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Timer">
+  <meta name="apple-mobile-web-app-title" content="Intervals">
   <style>
+    :root {
+      --bg: #000000;
+      --card-bg: #1c1c1e;
+      --accent-work: #30d158;
+      --accent-rest: #ff9f0a;
+      --accent-done: #0a84ff;
+      --text: #ffffff;
+      --text-muted: #8e8e93;
+    }
     * {
       box-sizing: border-box;
       -webkit-tap-highlight-color: transparent;
       user-select: none;
+      margin: 0;
+      padding: 0;
     }
     body {
-      margin: 0;
-      padding: env(safe-area-inset-top) 20px env(safe-area-inset-bottom) 20px;
-      background-color: #000;
-      color: #fff;
+      background-color: var(--bg);
+      color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
       min-height: 100vh;
+      padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
+      transition: background-color 0.3s ease;
     }
-    .display {
-      font-size: clamp(4.5rem, 18vw, 7rem);
-      font-weight: 300;
-      font-variant-numeric: tabular-nums;
-      margin-bottom: 24px;
-      letter-spacing: -2px;
-    }
-    .presets {
+    body.phase-work { background-color: #05240f; }
+    body.phase-rest { background-color: #2b1800; }
+    body.phase-done { background-color: #021a38; }
+
+    .container {
+      width: 100%;
+      max-width: 440px;
       display: flex;
-      gap: 10px;
-      margin-bottom: 30px;
-      flex-wrap: wrap;
-      justify-content: center;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
     }
-    .presets button {
-      background: #1c1c1e;
-      border: 1px solid #2c2c2e;
-      color: #ff9f0a;
-      padding: 10px 18px;
-      border-radius: 20px;
-      font-size: 1rem;
-      font-weight: 500;
-      cursor: pointer;
-    }
-    .controls {
+
+    /* Timer Display */
+    .timer-card {
+      width: 100%;
+      background: var(--card-bg);
+      border-radius: 24px;
+      padding: 24px 16px;
+      text-align: center;
       display: flex;
-      gap: 24px;
+      flex-direction: column;
       align-items: center;
     }
+    .phase-badge {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      color: var(--text-muted);
+    }
+    .phase-work .phase-badge { color: var(--accent-work); }
+    .phase-rest .phase-badge { color: var(--accent-rest); }
+    .phase-done .phase-badge { color: var(--accent-done); }
+
+    .time-large {
+      font-size: clamp(5rem, 20vw, 7.5rem);
+      font-weight: 300;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      margin: 10px 0;
+    }
+    .round-info {
+      font-size: 1.25rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    /* Controls */
+    .controls {
+      display: flex;
+      gap: 20px;
+      margin-top: 10px;
+    }
     .circle-btn {
-      width: 80px;
-      height: 80px;
+      width: 76px;
+      height: 76px;
       border-radius: 50%;
       border: none;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: opacity 0.15s ease;
     }
-    .circle-btn:active {
-      opacity: 0.7;
+    .circle-btn:active { opacity: 0.7; }
+    .btn-start { background: #0a3818; color: var(--accent-work); }
+    .btn-pause { background: #402905; color: var(--accent-rest); }
+    .btn-reset { background: #2c2c2e; color: #fff; }
+
+    /* Configuration Panel */
+    .config-card {
+      width: 100%;
+      background: var(--card-bg);
+      border-radius: 20px;
+      padding: 18px;
     }
-    .start {
-      background-color: #0a3818;
-      color: #34c759;
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
     }
-    .pause {
-      background-color: #402905;
-      color: #ff9f0a;
-    }
-    .reset {
-      background-color: #1c1c1e;
+    .row label {
+      font-size: 1rem;
       color: #e5e5ea;
+    }
+    .row input {
+      width: 90px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid #3a3a3c;
+      background: #000;
+      color: #fff;
+      font-size: 1rem;
+      text-align: center;
+    }
+
+    /* Presets Section */
+    .save-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .save-row input {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid #3a3a3c;
+      background: #000;
+      color: #fff;
+      font-size: 0.95rem;
+    }
+    .save-row button {
+      padding: 10px 16px;
+      border-radius: 12px;
+      border: none;
+      background: #2c2c2e;
+      color: #fff;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .preset-list {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .preset-chip {
+      background: #2c2c2e;
+      border-radius: 12px;
+      padding: 10px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+    .preset-chip .preset-name {
+      font-weight: 600;
+      color: #fff;
+    }
+    .preset-chip .preset-meta {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .preset-delete {
+      color: #ff453a;
+      background: transparent;
+      border: none;
+      font-size: 1.1rem;
+      padding: 4px 8px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
 
-  <div class="display" id="timeDisplay">05:00</div>
+<div class="container">
+  <!-- Active Timer Card -->
+  <div class="timer-card">
+    <div class="phase-badge" id="phaseDisplay">Ready</div>
+    <div class="time-large" id="timeDisplay">00:20</div>
+    <div class="round-info" id="roundDisplay">Round 1 of 8</div>
 
-  <div class="presets">
-    <button onclick="setDuration(60)">1m</button>
-    <button onclick="setDuration(300)">5m</button>
-    <button onclick="setDuration(600)">10m</button>
-    <button onclick="setDuration(1500)">25m</button>
+    <div class="controls">
+      <button class="circle-btn btn-reset" onclick="resetTimer()">Reset</button>
+      <button class="circle-btn btn-start" id="startBtn" onclick="toggleTimer()">Start</button>
+    </div>
   </div>
 
-  <div class="controls">
-    <button class="circle-btn reset" onclick="resetTimer()">Reset</button>
-    <button class="circle-btn start" id="startBtn" onclick="toggleTimer()">Start</button>
+  <!-- Settings & Custom Inputs -->
+  <div class="config-card">
+    <div class="row">
+      <label for="workInput">Work (seconds)</label>
+      <input type="number" id="workInput" value="20" min="1" onchange="syncFromInputs()">
+    </div>
+    <div class="row">
+      <label for="restInput">Rest (seconds)</label>
+      <input type="number" id="restInput" value="10" min="0" onchange="syncFromInputs()">
+    </div>
+    <div class="row">
+      <label for="roundsInput">Rounds</label>
+      <input type="number" id="roundsInput" value="8" min="1" onchange="syncFromInputs()">
+    </div>
+
+    <!-- Save Timer -->
+    <div class="save-row">
+      <input type="text" id="presetName" placeholder="Timer name (e.g. Tabata)">
+      <button onclick="saveCurrentPreset()">Save</button>
+    </div>
+
+    <div class="preset-list" id="presetList"></div>
   </div>
+</div>
 
-  <script>
-    let totalSeconds = 300;
-    let remaining = 300;
-    let timerId = null;
+<script>
+  let config = { work: 20, rest: 10, rounds: 8 };
+  let currentRound = 1;
+  let phase = 'ready'; // 'ready', 'work', 'rest', 'done'
+  let secondsRemaining = 20;
+  let timerId = null;
+  let wakeLock = null;
+  let audioCtx = null;
 
-    const display = document.getElementById('timeDisplay');
-    const startBtn = document.getElementById('startBtn');
+  const body = document.body;
+  const phaseDisplay = document.getElementById('phaseDisplay');
+  const timeDisplay = document.getElementById('timeDisplay');
+  const roundDisplay = document.getElementById('roundDisplay');
+  const startBtn = document.getElementById('startBtn');
+  const workInput = document.getElementById('workInput');
+  const restInput = document.getElementById('restInput');
+  const roundsInput = document.getElementById('roundsInput');
+  const presetList = document.getElementById('presetList');
 
-    // Web Audio Synthesizer (Beeps when done without external audio files)
-    let audioCtx = null;
-    function playBeep() {
-      try {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        for (let i = 0; i < 3; i++) {
-          setTimeout(() => {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.frequency.value = 880;
-            gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.3);
-          }, i * 400);
-        }
-      } catch (e) {
-        console.warn("Audio unavailable", e);
-      }
-    }
-
-    function updateDisplay() {
-      const mins = Math.floor(remaining / 60);
-      const secs = remaining % 60;
-      display.textContent = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-    }
-
-    function toggleTimer() {
-      // Initialize audio context on first user tap
+  // Web Audio Cues
+  function playTone(freq, duration = 0.15) {
+    try {
       if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      
-      if (timerId) {
-        clearInterval(timerId);
-        timerId = null;
-        startBtn.textContent = 'Start';
-        startBtn.className = 'circle-btn start';
-      } else {
-        if (remaining <= 0) remaining = totalSeconds;
-        timerId = setInterval(() => {
-          if (remaining > 0) {
-            remaining--;
-            updateDisplay();
-          } else {
-            clearInterval(timerId);
-            timerId = null;
-            startBtn.textContent = 'Start';
-            startBtn.className = 'circle-btn start';
-            playBeep();
-            if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-          }
-        }, 1000);
-        startBtn.textContent = 'Pause';
-        startBtn.className = 'circle-btn pause';
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    } catch(e) {}
+  }
+
+  // Prevent Screen Sleep (Safari on iOS 16.4+)
+  async function requestWakeLock() {
+    if ('wakeLock' in navigator) {
+      try {
+        wakeLock = await navigator.wakeLock.request('screen');
+      } catch (err) {}
+    }
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock) {
+      wakeLock.release().catch(() => {});
+      wakeLock = null;
+    }
+  }
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function updateUI() {
+    timeDisplay.textContent = formatTime(secondsRemaining);
+    roundDisplay.textContent = `Round ${currentRound} of ${config.rounds}`;
+    phaseDisplay.textContent = phase.toUpperCase();
+
+    body.className = '';
+    if (phase === 'work') body.classList.add('phase-work');
+    else if (phase === 'rest') body.classList.add('phase-rest');
+    else if (phase === 'done') body.classList.add('phase-done');
+  }
+
+  function syncFromInputs() {
+    if (timerId) return;
+    config.work = Math.max(1, parseInt(workInput.value) || 20);
+    config.rest = Math.max(0, parseInt(restInput.value) || 0);
+    config.rounds = Math.max(1, parseInt(roundsInput.value) || 1);
+    resetTimer();
+  }
+
+  function toggleTimer() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    if (timerId) {
+      // Pause
+      clearInterval(timerId);
+      timerId = null;
+      startBtn.textContent = 'Start';
+      startBtn.className = 'circle-btn btn-start';
+      releaseWakeLock();
+    } else {
+      // Start or Resume
+      requestWakeLock();
+      if (phase === 'ready' || phase === 'done') {
+        currentRound = 1;
+        phase = 'work';
+        secondsRemaining = config.work;
+        playTone(880, 0.3); // High starting beep
       }
+      timerId = setInterval(tick, 1000);
+      startBtn.textContent = 'Pause';
+      startBtn.className = 'circle-btn btn-pause';
+      updateUI();
     }
+  }
 
-    function resetTimer() {
+  function tick() {
+    if (secondsRemaining > 1) {
+      secondsRemaining--;
+      if (secondsRemaining <= 3) playTone(440, 0.1); // 3, 2, 1 warning beeps
+      updateUI();
+    } else {
+      // Transition Phase
+      if (phase === 'work') {
+        if (config.rest > 0 && currentRound <= config.rounds) {
+          phase = 'rest';
+          secondsRemaining = config.rest;
+          playTone(587, 0.25); // Lower rest beep
+        } else {
+          advanceRound();
+        }
+      } else if (phase === 'rest') {
+        advanceRound();
+      }
+      updateUI();
+    }
+  }
+
+  function advanceRound() {
+    if (currentRound < config.rounds) {
+      currentRound++;
+      phase = 'work';
+      secondsRemaining = config.work;
+      playTone(880, 0.3); // Work beep
+    } else {
+      // Finished all rounds
+      phase = 'done';
+      secondsRemaining = 0;
       clearInterval(timerId);
       timerId = null;
-      remaining = totalSeconds;
       startBtn.textContent = 'Start';
-      startBtn.className = 'circle-btn start';
-      updateDisplay();
+      startBtn.className = 'circle-btn btn-start';
+      releaseWakeLock();
+      playTone(1046, 0.5); // Final high chime
     }
+  }
 
-    function setDuration(secs) {
-      clearInterval(timerId);
-      timerId = null;
-      totalSeconds = secs;
-      remaining = secs;
-      startBtn.textContent = 'Start';
-      startBtn.className = 'circle-btn start';
-      updateDisplay();
-    }
+  function resetTimer() {
+    clearInterval(timerId);
+    timerId = null;
+    phase = 'ready';
+    currentRound = 1;
+    secondsRemaining = config.work;
+    startBtn.textContent = 'Start';
+    startBtn.className = 'circle-btn btn-start';
+    releaseWakeLock();
+    updateUI();
+  }
 
-    updateDisplay();
-  </script>
+  // Presets via localStorage
+  function loadPresets() {
+    const saved = localStorage.getItem('interval_presets');
+    const presets = saved ? JSON.parse(saved) : [
+      { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
+      { name: 'Boxing Rounds', work: 180, rest: 60, rounds: 5 }
+    ];
+    presetList.innerHTML = '';
+    presets.forEach((p, idx) => {
+      const chip = document.createElement('div');
+      chip.className = 'preset-chip';
+      chip.innerHTML = `
+        <div onclick="applyPreset(${idx})">
+          <div class="preset-name">${p.name}</div>
+          <div class="preset-meta">${p.work}s Work • ${p.rest}s Rest • ${p.rounds} Rds</div>
+        </div>
+        <button class="preset-delete" onclick="deletePreset(${idx})">✕</button>
+      `;
+      presetList.appendChild(chip);
+    });
+  }
+
+  function saveCurrentPreset() {
+    const nameInput = document.getElementById('presetName');
+    const name = nameInput.value.trim() || `Workout ${new Date().toLocaleDateString()}`;
+    const saved = localStorage.getItem('interval_presets');
+    const presets = saved ? JSON.parse(saved) : [];
+    presets.push({
+      name,
+      work: parseInt(workInput.value) || 20,
+      rest: parseInt(restInput.value) || 10,
+      rounds: parseInt(roundsInput.value) || 8
+    });
+    localStorage.setItem('interval_presets', JSON.stringify(presets));
+    nameInput.value = '';
+    loadPresets();
+  }
+
+  function applyPreset(idx) {
+    const presets = JSON.parse(localStorage.getItem('interval_presets'));
+    const p = presets[idx];
+    if (!p) return;
+    workInput.value = p.work;
+    restInput.value = p.rest;
+    roundsInput.value = p.rounds;
+    syncFromInputs();
+  }
+
+  function deletePreset(idx) {
+    const presets = JSON.parse(localStorage.getItem('interval_presets'));
+    presets.splice(idx, 1);
+    localStorage.setItem('interval_presets', JSON.stringify(presets));
+    loadPresets();
+  }
+
+  // Initial setup
+  loadPresets();
+  syncFromInputs();
+</script>
 </body>
 </html>
