@@ -506,7 +506,7 @@
     }
 
     if (phase === 'work') {
-      const midpointThreshold = Math.max(1, Math.ceil(config.work / 2 - 0.5));
+      const midpointThreshold = Math.max(1, Math.ceil(config.work / 2 + 0.5));
       if (!midwayCuePlayedThisWork && secondsRemaining <= midpointThreshold) {
         midwayCuePlayedThisWork = true;
         playHalfwayCue();
