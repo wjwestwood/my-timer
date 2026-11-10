@@ -255,6 +255,9 @@
   let isAudioUnlocked = false;
   let gongBuffer = null;
   let rawGongArrayBuffer = null;
+  let halfwayCueBuffer = null;
+  let rawHalfwayCueArrayBuffer = null;
+  let midwayCuePlayedThisWork = false;
 
   const DEFAULT_PRESETS = [
     { name: 'Tabata', work: 20, rest: 10, rounds: 8 },
@@ -279,6 +282,16 @@
       // If audio context was already instantiated, decode right away
       if (audioCtx && !gongBuffer) {
         audioCtx.decodeAudioData(buf.slice(0), decoded => { gongBuffer = decoded; });
+      }
+    })
+    .catch(() => {});
+
+  fetch('alf way.mp3')
+    .then(r => r.arrayBuffer())
+    .then(buf => {
+      rawHalfwayCueArrayBuffer = buf;
+      if (audioCtx && !halfwayCueBuffer) {
+        audioCtx.decodeAudioData(buf.slice(0), decoded => { halfwayCueBuffer = decoded; });
       }
     })
     .catch(() => {});
@@ -349,6 +362,36 @@
 
   function playRestBlip() {
     playTone(440, 0.25, 'sine');
+  }
+
+  function playAudioBuffer(buffer) {
+    if (!audioCtx || !buffer) return;
+    try {
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(audioCtx.destination);
+      source.start(audioCtx.currentTime);
+    } catch (e) {}
+  }
+
+  function playHalfwayCue() {
+    unlockAudio();
+    if (!audioCtx) return;
+
+    if (halfwayCueBuffer) {
+      playAudioBuffer(halfwayCueBuffer);
+      return;
+    }
+
+    if (rawHalfwayCueArrayBuffer) {
+      audioCtx.decodeAudioData(rawHalfwayCueArrayBuffer.slice(0), decoded => {
+        halfwayCueBuffer = decoded;
+        playAudioBuffer(decoded);
+      }, () => {});
+      return;
+    }
+
+    playCountBlip();
   }
 
   // Instant trigger with 0ms delay
@@ -437,6 +480,7 @@
         currentRound = 1;
         phase = 'prepare';
         secondsRemaining = 3;
+        midwayCuePlayedThisWork = false;
         playCountBlip();
       }
       timerId = setInterval(tick, 1000);
@@ -454,10 +498,19 @@
       } else {
         phase = 'work';
         secondsRemaining = config.work;
+        midwayCuePlayedThisWork = false;
         playGoBlip();
       }
       updateUI();
       return;
+    }
+
+    if (phase === 'work') {
+      const midpointThreshold = Math.max(1, Math.ceil(config.work / 2 - 0.5));
+      if (!midwayCuePlayedThisWork && secondsRemaining <= midpointThreshold) {
+        midwayCuePlayedThisWork = true;
+        playHalfwayCue();
+      }
     }
 
     if (secondsRemaining > 1) {
@@ -487,6 +540,7 @@
       currentRound++;
       phase = 'work';
       secondsRemaining = config.work;
+      midwayCuePlayedThisWork = false;
       playGoBlip();
     } else {
       phase = 'done';
@@ -506,6 +560,7 @@
     phase = 'ready';
     currentRound = 1;
     secondsRemaining = config.work;
+    midwayCuePlayedThisWork = false;
     startBtn.textContent = 'Start';
     startBtn.className = 'circle-btn btn-start';
     releaseWakeLock();
