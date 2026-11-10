@@ -328,7 +328,7 @@
         osc.frequency.exponentialRampToValueAtTime(sweepTo, now + duration);
       }
 
-      gain.gain.setValueAtTime(0.6, now);
+      gain.gain.setValueAtTime(0.9, now);
       gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
 
       osc.connect(gain);
@@ -575,3 +575,4 @@
 </script>
 </body>
 </html>
+gain.gain.setValueAtTime(0.9, now);gain.gain.setValueAtTime(0.9, now);
