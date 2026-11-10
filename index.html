@@ -468,7 +468,7 @@
       updateUI();
     } else {
       if (phase === 'work') {
-        if (config.rest > 0 && currentRound <= config.rounds) {
+        if (config.rest > 0 && currentRound < config.rounds) {
           phase = 'rest';
           secondsRemaining = config.rest;
           playRestBlip();
