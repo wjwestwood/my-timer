@@ -92,8 +92,11 @@
 
     .controls {
       display: flex;
-      gap: 20px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
       margin-top: 10px;
+      width: 100%;
     }
     .circle-btn {
       width: 76px;
@@ -111,6 +114,49 @@
     .btn-start { background: #0a3818; color: var(--accent-work); }
     .btn-pause { background: #402905; color: var(--accent-rest); }
     .btn-reset { background: #2c2c2e; color: #fff; }
+    .feature-toggle {
+      width: 76px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font: inherit;
+      font-size: 0.72rem;
+      line-height: 1.15;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      text-align: center;
+      cursor: pointer;
+    }
+    .feature-toggle:active { opacity: 0.7; }
+    .toggle-track {
+      width: 40px;
+      height: 24px;
+      padding: 3px;
+      border-radius: 12px;
+      background: #48484a;
+      transition: background-color 0.2s ease;
+    }
+    .toggle-track::after {
+      content: "";
+      display: block;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.2s ease;
+    }
+    .feature-toggle[aria-pressed="true"] { color: #fff; }
+    .feature-toggle[aria-pressed="true"] .toggle-track { background: #30d158; }
+    .feature-toggle[aria-pressed="true"] .toggle-track::after { transform: translateX(16px); }
+
+    @media (max-width: 380px) {
+      .controls { gap: 4px; }
+      .circle-btn { width: 56px; height: 56px; }
+      .feature-toggle { width: 58px; font-size: 0.62rem; }
+    }
 
     .config-card {
       width: 100%;
@@ -214,8 +260,16 @@
     <div class="round-info" id="roundDisplay">Round 1 of 8</div>
 
     <div class="controls">
+      <button class="feature-toggle" id="skipLastRestToggle" type="button" aria-pressed="true" onclick="toggleSkipLastRest()">
+        <span>Skip last rest</span>
+        <span class="toggle-track" aria-hidden="true"></span>
+      </button>
       <button class="circle-btn btn-reset" onclick="resetTimer()">Reset</button>
       <button class="circle-btn btn-start" id="startBtn" onclick="toggleTimer()">Start</button>
+      <button class="feature-toggle" id="halfwayCueToggle" type="button" aria-pressed="true" onclick="toggleHalfwayCue()">
+        <span>Half-way cue</span>
+        <span class="toggle-track" aria-hidden="true"></span>
+      </button>
     </div>
   </div>
 
@@ -250,6 +304,8 @@
   let secondsRemaining = 20;
   let timerId = null;
   let wakeLock = null;
+  let skipLastRest = true;
+  let halfwayCueEnabled = true;
 
   let audioCtx = null;
   let isAudioUnlocked = false;
@@ -375,6 +431,7 @@
   }
 
   function playHalfwayCue() {
+    if (!halfwayCueEnabled) return;
     unlockAudio();
     if (!audioCtx) return;
 
@@ -465,6 +522,16 @@
     resetTimer();
   }
 
+  function toggleSkipLastRest() {
+    skipLastRest = !skipLastRest;
+    document.getElementById('skipLastRestToggle').setAttribute('aria-pressed', skipLastRest);
+  }
+
+  function toggleHalfwayCue() {
+    halfwayCueEnabled = !halfwayCueEnabled;
+    document.getElementById('halfwayCueToggle').setAttribute('aria-pressed', halfwayCueEnabled);
+  }
+
   function toggleTimer() {
     unlockAudio();
 
@@ -521,7 +588,7 @@
       updateUI();
     } else {
       if (phase === 'work') {
-        if (config.rest > 0 && currentRound < config.rounds) {
+        if (config.rest > 0 && (!skipLastRest || currentRound < config.rounds)) {
           phase = 'rest';
           secondsRemaining = config.rest;
           playRestBlip();
