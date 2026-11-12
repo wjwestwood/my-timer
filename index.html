@@ -9,17 +9,24 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Intervals">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
   
   <style>
     :root {
-      --bg: #000000;
-      --card-bg: #1c1c1e;
-      --accent-prepare: #ffd60a;
-      --accent-work: #30d158;
-      --accent-rest: #ff9f0a;
-      --accent-done: #0a84ff;
-      --text: #ffffff;
-      --text-muted: #8e8e93;
+      color-scheme: dark;
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --field-bg: #0f172a;
+      --accent-prepare: #38bdf8;
+      --accent-work: #10b981;
+      --accent-rest: #f59e0b;
+      --accent-done: #38bdf8;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent: #f59e0b;
     }
     * {
       box-sizing: border-box;
@@ -31,7 +38,7 @@
     body {
       background-color: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      font: 400 14px/1.5 "JetBrains Mono", monospace;
       min-height: 100vh;
       padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px);
       display: flex;
@@ -40,10 +47,11 @@
       justify-content: flex-start;
       transition: background-color 0.25s ease;
     }
-    body.phase-prepare { background-color: #2c2500; }
-    body.phase-work { background-color: #05240f; }
-    body.phase-rest { background-color: #2b1800; }
-    body.phase-done { background-color: #021a38; }
+    button, input { font: inherit; }
+    body.phase-prepare { background-color: #102333; }
+    body.phase-work { background-color: #0d2823; }
+    body.phase-rest { background-color: #2b2417; }
+    body.phase-done { background-color: #102333; }
 
     .container {
       width: 100%;
@@ -57,6 +65,7 @@
     .timer-card {
       width: 100%;
       background: var(--card-bg);
+      border: 1px solid var(--card-border);
       border-radius: 24px;
       padding: 24px 16px;
       text-align: center;
@@ -79,7 +88,7 @@
 
     .time-large {
       font-size: clamp(5.5rem, 22vw, 8rem);
-      font-weight: 300;
+      font-weight: 600;
       font-variant-numeric: tabular-nums;
       line-height: 1;
       margin: 10px 0;
@@ -87,7 +96,8 @@
     .round-info {
       font-size: 1.25rem;
       color: var(--text-muted);
-      font-weight: 500;
+      font-weight: 400;
+      font-style: italic;
     }
 
     .controls {
@@ -111,9 +121,9 @@
       justify-content: center;
     }
     .circle-btn:active { opacity: 0.7; }
-    .btn-start { background: #0a3818; color: var(--accent-work); }
-    .btn-pause { background: #402905; color: var(--accent-rest); }
-    .btn-reset { background: #2c2c2e; color: #fff; }
+    .btn-start { background: #12392f; color: #6ee7b7; }
+    .btn-pause { background: #433316; color: #fcd34d; }
+    .btn-reset { background: #253347; color: var(--text); }
     .feature-toggle {
       width: 76px;
       border: none;
@@ -121,6 +131,8 @@
       color: var(--text-muted);
       font: inherit;
       font-size: 0.72rem;
+      font-weight: 500;
+      font-style: italic;
       line-height: 1.15;
       display: flex;
       flex-direction: column;
@@ -136,7 +148,7 @@
       height: 24px;
       padding: 3px;
       border-radius: 12px;
-      background: #48484a;
+      background: #475569;
       transition: background-color 0.2s ease;
     }
     .toggle-track::after {
@@ -145,11 +157,11 @@
       width: 18px;
       height: 18px;
       border-radius: 50%;
-      background: #fff;
+      background: var(--text);
       transition: transform 0.2s ease;
     }
-    .feature-toggle[aria-pressed="true"] { color: #fff; }
-    .feature-toggle[aria-pressed="true"] .toggle-track { background: #30d158; }
+    .feature-toggle[aria-pressed="true"] { color: var(--text); }
+    .feature-toggle[aria-pressed="true"] .toggle-track { background: var(--accent-work); }
     .feature-toggle[aria-pressed="true"] .toggle-track::after { transform: translateX(16px); }
 
     @media (max-width: 380px) {
@@ -161,6 +173,7 @@
     .config-card {
       width: 100%;
       background: var(--card-bg);
+      border: 1px solid var(--card-border);
       border-radius: 20px;
       padding: 18px;
     }
@@ -172,19 +185,24 @@
     }
     .row label {
       font-size: 1rem;
-      color: #e5e5ea;
+      font-weight: 600;
+      color: #cbd5e1;
     }
     .row input {
       width: 90px;
       padding: 8px 12px;
       border-radius: 10px;
-      border: 1px solid #3a3a3c;
-      background: #000;
-      color: #fff;
+      border: 1px solid var(--card-border);
+      background: var(--field-bg);
+      color: var(--text);
       font-size: 1rem;
       text-align: center;
     }
-
+    .row input:focus, .save-row input:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, .12);
+    }
     .save-row {
       display: flex;
       gap: 8px;
@@ -194,18 +212,18 @@
       flex: 1;
       padding: 10px 14px;
       border-radius: 12px;
-      border: 1px solid #3a3a3c;
-      background: #000;
-      color: #fff;
+      border: 1px solid var(--card-border);
+      background: var(--field-bg);
+      color: var(--text);
       font-size: 0.95rem;
     }
     .save-row button {
       padding: 10px 16px;
       border-radius: 12px;
       border: none;
-      background: #30d158;
-      color: #000;
-      font-weight: 600;
+      background: var(--accent);
+      color: #111827;
+      font-weight: 700;
       cursor: pointer;
     }
 
@@ -214,6 +232,7 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--text-muted);
+      font-weight: 700;
       margin-top: 16px;
       margin-bottom: 6px;
     }
@@ -225,7 +244,7 @@
       gap: 8px;
     }
     .preset-chip {
-      background: #2c2c2e;
+      background: #253347;
       border-radius: 12px;
       padding: 10px 14px;
       display: flex;
@@ -235,14 +254,15 @@
     }
     .preset-chip .preset-name {
       font-weight: 600;
-      color: #fff;
+      color: var(--text);
     }
     .preset-chip .preset-meta {
       font-size: 0.85rem;
+      font-style: italic;
       color: var(--text-muted);
     }
     .preset-delete {
-      color: #ff453a;
+      color: #f87171;
       background: transparent;
       border: none;
       font-size: 1.2rem;
