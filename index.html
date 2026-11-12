@@ -49,7 +49,7 @@
     }
     button, input { font: inherit; }
     body.phase-prepare { background-color: #102333; }
-    body.phase-work { background-color: #0d2823; }
+    body.phase-work { background-color: #44AF69; }
     body.phase-rest { background-color: #2b2417; }
     body.phase-done { background-color: #102333; }
 
@@ -323,6 +323,9 @@
   let phase = 'ready';
   let secondsRemaining = 20;
   let timerId = null;
+  let halfwayCueTimeoutId = null;
+  let halfwayCueDeadline = null;
+  let halfwayCueRemainingMs = null;
   let wakeLock = null;
   let skipLastRest = true;
   let halfwayCueEnabled = true;
@@ -552,12 +555,50 @@
     document.getElementById('halfwayCueToggle').setAttribute('aria-pressed', halfwayCueEnabled);
   }
 
+  function clearHalfwayCueTimer() {
+    if (halfwayCueTimeoutId !== null) {
+      clearTimeout(halfwayCueTimeoutId);
+      halfwayCueTimeoutId = null;
+    }
+    halfwayCueDeadline = null;
+  }
+
+  function cancelHalfwayCueTimer() {
+    clearHalfwayCueTimer();
+    halfwayCueRemainingMs = null;
+  }
+
+  function startHalfwayCueTimer() {
+    if (phase !== 'work' || midwayCuePlayedThisWork || halfwayCueTimeoutId !== null) return;
+
+    const delayMs = halfwayCueRemainingMs ?? Math.max(0, config.work * 500 - 500);
+    halfwayCueRemainingMs = null;
+    halfwayCueDeadline = performance.now() + delayMs;
+    halfwayCueTimeoutId = setTimeout(() => {
+      halfwayCueTimeoutId = null;
+      halfwayCueDeadline = null;
+      if (phase !== 'work' || midwayCuePlayedThisWork) return;
+      midwayCuePlayedThisWork = true;
+      playHalfwayCue();
+    }, delayMs);
+  }
+
+  function pauseHalfwayCueTimer() {
+    if (halfwayCueTimeoutId === null) return;
+
+    clearTimeout(halfwayCueTimeoutId);
+    halfwayCueTimeoutId = null;
+    halfwayCueRemainingMs = Math.max(0, halfwayCueDeadline - performance.now());
+    halfwayCueDeadline = null;
+  }
+
   function toggleTimer() {
     unlockAudio();
 
     if (timerId) {
       clearInterval(timerId);
       timerId = null;
+      pauseHalfwayCueTimer();
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
@@ -570,6 +611,7 @@
         midwayCuePlayedThisWork = false;
         playCountBlip();
       }
+      startHalfwayCueTimer();
       timerId = setInterval(tick, 1000);
       startBtn.textContent = 'Pause';
       startBtn.className = 'circle-btn btn-pause';
@@ -586,18 +628,11 @@
         phase = 'work';
         secondsRemaining = config.work;
         midwayCuePlayedThisWork = false;
+        startHalfwayCueTimer();
         playGoBlip();
       }
       updateUI();
       return;
-    }
-
-    if (phase === 'work') {
-      const midpointThreshold = Math.max(1, Math.ceil(config.work / 2 + 0.5));
-      if (!midwayCuePlayedThisWork && secondsRemaining <= midpointThreshold) {
-        midwayCuePlayedThisWork = true;
-        playHalfwayCue();
-      }
     }
 
     if (secondsRemaining > 1) {
@@ -608,6 +643,7 @@
       updateUI();
     } else {
       if (phase === 'work') {
+        cancelHalfwayCueTimer();
         if (config.rest > 0 && (!skipLastRest || currentRound < config.rounds)) {
           phase = 'rest';
           secondsRemaining = config.rest;
@@ -623,11 +659,13 @@
   }
 
   function advanceRound() {
+    cancelHalfwayCueTimer();
     if (currentRound < config.rounds) {
       currentRound++;
       phase = 'work';
       secondsRemaining = config.work;
       midwayCuePlayedThisWork = false;
+      startHalfwayCueTimer();
       playGoBlip();
     } else {
       phase = 'done';
@@ -644,6 +682,7 @@
   function resetTimer() {
     clearInterval(timerId);
     timerId = null;
+    cancelHalfwayCueTimer();
     phase = 'ready';
     currentRound = 1;
     secondsRemaining = config.work;
