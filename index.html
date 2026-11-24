@@ -50,6 +50,7 @@
     button, input { font: inherit; }
     body.phase-prepare { background-color: #102333; }
     body.phase-work { background-color: #44AF69; }
+    body.phase-work.phase-halfway-flash { background-color: #fff; }
     body.phase-rest { background-color: #e88918; }
     body.phase-done { background-color: #102333; }
     body.phase-stopped { background-color: #b83232; }
@@ -327,6 +328,7 @@
   let halfwayCueTimeoutId = null;
   let halfwayCueDeadline = null;
   let halfwayCueRemainingMs = null;
+  let halfwayFlashTimeoutId = null;
   let wakeLock = null;
   let skipLastRest = true;
   let halfwayCueEnabled = true;
@@ -567,6 +569,17 @@
     document.getElementById('halfwayCueToggle').setAttribute('aria-pressed', halfwayCueEnabled);
   }
 
+  function flashWorkBackground() {
+    if (halfwayFlashTimeoutId !== null) {
+      clearTimeout(halfwayFlashTimeoutId);
+    }
+    body.classList.add('phase-halfway-flash');
+    halfwayFlashTimeoutId = setTimeout(() => {
+      body.classList.remove('phase-halfway-flash');
+      halfwayFlashTimeoutId = null;
+    }, 300);
+  }
+
   function clearHalfwayCueTimer() {
     if (halfwayCueTimeoutId !== null) {
       clearTimeout(halfwayCueTimeoutId);
@@ -591,6 +604,7 @@
       halfwayCueDeadline = null;
       if (phase !== 'work' || midwayCuePlayedThisWork) return;
       midwayCuePlayedThisWork = true;
+      flashWorkBackground();
       playHalfwayCue();
     }, delayMs);
   }
