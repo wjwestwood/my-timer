@@ -50,8 +50,9 @@
     button, input { font: inherit; }
     body.phase-prepare { background-color: #102333; }
     body.phase-work { background-color: #44AF69; }
-    body.phase-rest { background-color: #2b2417; }
+    body.phase-rest { background-color: #e88918; }
     body.phase-done { background-color: #102333; }
+    body.phase-stopped { background-color: #b83232; }
 
     .container {
       width: 100%;
@@ -535,6 +536,7 @@
     else if (phase === 'work') body.classList.add('phase-work');
     else if (phase === 'rest') body.classList.add('phase-rest');
     else if (phase === 'done') body.classList.add('phase-done');
+    if (!timerId) body.classList.add('phase-stopped');
   }
 
   function parseRestSeconds(rawValue) {
@@ -612,6 +614,7 @@
       startBtn.textContent = 'Start';
       startBtn.className = 'circle-btn btn-start';
       releaseWakeLock();
+      updateUI();
     } else {
       requestWakeLock();
       if (phase === 'ready' || phase === 'done') {
